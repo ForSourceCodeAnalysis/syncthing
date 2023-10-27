@@ -165,12 +165,13 @@ func (s *apiSrv) handler(w http.ResponseWriter, req *http.Request) {
 func (s *apiSrv) handleGET(w http.ResponseWriter, req *http.Request) {
 	reqID := req.Context().Value(idKey).(requestID)
 
+	proto := fmt.Sprintf("http%d", req.ProtoMajor)
 	deviceID, err := protocol.DeviceIDFromString(req.URL.Query().Get("device"))
 	if err != nil {
 		if debug {
 			log.Println(reqID, "bad device param")
 		}
-		lookupRequestsTotal.WithLabelValues("bad_request").Inc()
+		lookupRequestsTotal.WithLabelValues("bad_request", proto).Inc()
 		w.Header().Set("Retry-After", errorRetryAfterString())
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -180,14 +181,14 @@ func (s *apiSrv) handleGET(w http.ResponseWriter, req *http.Request) {
 	rec, err := s.db.get(key)
 	if err != nil {
 		// some sort of internal error
-		lookupRequestsTotal.WithLabelValues("internal_error").Inc()
+		lookupRequestsTotal.WithLabelValues("internal_error", proto).Inc()
 		w.Header().Set("Retry-After", errorRetryAfterString())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	if len(rec.Addresses) == 0 {
-		lookupRequestsTotal.WithLabelValues("not_found").Inc()
+		lookupRequestsTotal.WithLabelValues("not_found", proto).Inc()
 
 		s.mapsMut.Lock()
 		misses := s.misses[key]
@@ -212,17 +213,18 @@ func (s *apiSrv) handleGET(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	lookupRequestsTotal.WithLabelValues("success").Inc()
-
 	w.Header().Set("Content-Type", "application/json")
 	var bw io.Writer = w
 
 	// Use compression if the client asks for it
 	if strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
+		lookupRequestsTotal.WithLabelValues("success", proto+"_gzip").Inc()
 		w.Header().Set("Content-Encoding", "gzip")
 		gw := gzip.NewWriter(bw)
 		defer gw.Close()
 		bw = gw
+	} else {
+		lookupRequestsTotal.WithLabelValues("success", proto).Inc()
 	}
 
 	json.NewEncoder(bw).Encode(announcement{

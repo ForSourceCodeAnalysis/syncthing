@@ -36,7 +36,7 @@ var (
 			Subsystem: "discovery",
 			Name:      "lookup_requests_total",
 			Help:      "Number of lookup requests.",
-		}, []string{"result"})
+		}, []string{"result", "protocol"})
 	announceRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "syncthing",
@@ -120,5 +120,4 @@ func init() {
 	prometheus.MustRegister(
 		collectors.NewProcessCollector(processCollectorOpts),
 	)
-
 }
